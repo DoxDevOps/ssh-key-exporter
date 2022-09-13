@@ -4,14 +4,14 @@ import os
 import platform
 import subprocess
 import requests as requests
-from dotenv import load_dotenv
+from config.config import data
 import pandas as pd
 
-load_dotenv()  # load .env file
-_PASSWORDS_ = os.environ.get("PASSWORD")
-_ENDPOINT_ = os.environ.get("ENDPOINT")
+_PASSWORDS_ = data["PASSWORD"]
+_ENDPOINT_ = data["ENDPOINT"]
 print(_ENDPOINT_)
-
+_pushed_report_excel_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+_not_pushed_report_excel_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
 
 def get_xi_data(url):
     """
@@ -24,56 +24,78 @@ def get_xi_data(url):
     return site_data
 
 
-# Follow the following steps :
-# 1. get data from xi
-site_details = get_xi_data(_ENDPOINT_)
-# 2. record the length of the file
-length = len(site_details)
-counter = 0  # this is a checker
-checker = True
+def check_connectivity(sites_from_xi):
+    _counter_ = 0  # this is a checker
+    number_of_sites = len(sites_from_xi)
+    connection_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+    unreachable_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
 
-connection_report = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-failed_report = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-print("Start Service !! ")
-print(f"******** NUMBER OF SITES : {length}")
+    while _counter_ < number_of_sites:
+        print("******************** PROGRESS BAR ******************************")
+        print("Checking site number {} out of {} : ".format(_counter_ + 1, number_of_sites))
+        print("**************************************************")
 
-# 3. Loop through the sites from xi
-while counter < length:
-    ipaddress = site_details[counter]["fields"]["ip_address"]
-    username = site_details[counter]["fields"]["username"]
-    name = site_details[counter]["fields"]["name"]
-    district = site_details[counter]["fields"]["name"]
+        ipaddress = sites_from_xi[_counter_]["fields"]["ip_address"]
+        username = sites_from_xi[_counter_]["fields"]["username"]
+        name = sites_from_xi[_counter_]["fields"]["name"]
 
-    # 4. Check if a site is reachable
-    param = '-n' if platform.system().lower() == 'windows' else '-c'
-    print("******************")
-    print(f" checking site {name} : {counter}/{length}")
-    print("******************")
+        # 4. Check if a site is reachable
+        param = '-n' if platform.system().lower() == 'windows' else '-c'
 
-    if subprocess.call(['ping', param, '1', ipaddress]) == 0:
-        print("*************")
-        print(f"step 1 :  {name} :  is REACHABLE)")
+        if subprocess.call(['ping', param, '1', ipaddress]) == 0:
+            print("*************")
+            print("step 1 :  " + name + ": is REACHABLE")
+            connection_report_excel = connection_report_excel.append(
+                {'ip': ipaddress, 'facility': name, 'username': username, 'code': 0}, ignore_index=True)
+            connection_report_excel.to_excel('Reachable-Report.xlsx', index=False, header=True)
 
-        # 5. Test passwords
-        for each in _PASSWORDS_:
-            if checker:
-                # if connected, then push ssh keys
-                # answer = os.system("ssh-copy-id "+username+"@"+ipaddress+" | echo 'yes \n' ")
-                answer = os.system(
-                    "sshpass -p " + each + " ssh-copy-id -o StrictHostKeyChecking=no " + username + "@" + ipaddress)
-                ssh_code = answer
-                if ssh_code == 0:
-                    print("SSH KEY ADDED")
-                    connection_report = connection_report.append(
-                        {'ip': ipaddress, 'facility': name, 'username': username, 'code': ssh_code}, ignore_index=True)
+            # then try to push ssh keys
+            ipaddress = sites_from_xi[_counter_]["fields"]["ip_address"]
+            username = sites_from_xi[_counter_]["fields"]["username"]
+            name = sites_from_xi[_counter_]["fields"]["name"]
 
-                    checker = False
-                print(f"Returned code : {ssh_code}")
-                failed_report = failed_report.append(
-                    {'ip': ipaddress, 'facility': name, 'username': username, 'code': ssh_code}, ignore_index=True)
-        checker = True  # put it ack to default settings
-        connection_report.to_excel(f'Reachable-Report.xlsx', index=False, header=True)
-        failed_report.to_excel(f'Unreachable-Report.xlsx', index=False, header=True)
+            push_ssh_keys(ipaddress, name, username)
 
-        print("****************************")
-    counter += 1
+        _counter_ += 1
+        unreachable_report_excel = unreachable_report_excel.append(
+            {'ip': ipaddress, 'facility': name, 'username': username, 'code': 1}, ignore_index=True)
+        unreachable_report_excel.to_excel('unreachable_report_excel.xlsx', index=False, header=True)
+    return 1
+
+
+def push_ssh_keys(ip_address, facility, username):
+    ssh_code_occurrences = []
+    # 1 define files to keep pushed ssh sites
+
+    print("Starting to push SSH KEYS at : " + facility)
+
+    for each_password in _PASSWORDS_:
+        # if connected, then push ssh keys
+        # answer = os.system("ssh-copy-id "+username+"@"+ipaddress+" | echo 'yes \n' ")
+        ssh_code = os.system(
+            "sshpass -p " + each_password + " ssh-copy-id -o StrictHostKeyChecking=no " + username + "@" + ip_address)
+        # os.system(
+        # "ssh meduser@10.44.0.65 | echo 'User*12345' && sshpass -p " + each + " ssh-copy-id -o StrictHostKeyChecking=no " + username + "@" + ipaddress)
+
+        ssh_code_occurrences.append(ssh_code)
+    print("all ssh key push test are as follows :")
+    print(ssh_code_occurrences)
+    print("-----DONE-----")
+    if 0 in ssh_code_occurrences:
+        print("SSH KEY ADDED")
+        pushed_report_excel = _pushed_report_excel_.append(
+            {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
+
+        pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
+        # print("Returned code : " + ssh_code + "")
+    not_pushed_report_excel = _not_pushed_report_excel_.append(
+        {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
+    not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
+
+    print("****************************")
+
+
+# ************************** RUN THE SCRIPT **************************************************
+
+site_detailds = get_xi_data(_ENDPOINT_)
+check_connectivity(site_detailds)
