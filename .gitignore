@@ -6,7 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
+# Files
+not_pushed_report_excel.xlsx
+pushed_report_excel.xlsx
+Reachable-Report.xlsx
+unreachable_report_excel.xlsx
 # Distribution / packaging
+
 .Python
 build/
 develop-eggs/

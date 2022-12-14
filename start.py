@@ -9,9 +9,6 @@ import pandas as pd
 
 _PASSWORDS_ = data["PASSWORD"]
 _ENDPOINT_ = data["ENDPOINT"]
-print(_ENDPOINT_)
-_pushed_report_excel_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-_not_pushed_report_excel_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
 
 
 def get_xi_data(url):
@@ -22,18 +19,17 @@ def get_xi_data(url):
     """
     response = requests.get(url)
     site_data = json.loads(response.text)
+    print(site_data)
     return site_data
 
 
 def check_connectivity(sites_from_xi):
     _counter_ = 0  # this is a checker
     number_of_sites = len(sites_from_xi)
-    connection_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-    unreachable_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-    pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-    not_pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+    _connection_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+    _unreachable_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
 
-    while _counter_ < number_of_sites:
+    while _counter_ < 50:
         print("******************** PROGRESS BAR ******************************")
         print("Checking site number {} out of {} : ".format(_counter_ + 1, number_of_sites))
         print("**************************************************")
@@ -46,31 +42,35 @@ def check_connectivity(sites_from_xi):
         param = '-n' if platform.system().lower() == 'windows' else '-c'
 
         if subprocess.call(['ping', param, '1', ipaddress]) == 0:
-            print("*************")
+            print("*********************************** REACHABLE***********************************")
             print("step 1 :  " + name + ": is REACHABLE")
-            connection_report_excel = connection_report_excel.append(
+            _connection_report_excel = _connection_report_excel.append(
                 {'ip': ipaddress, 'facility': name, 'username': username, 'code': 0}, ignore_index=True)
-            connection_report_excel.to_excel('Reachable-Report.xlsx', index=False, header=True)
+
+
+            # then try to push ssh Keys ( ONLY FOR SITES THAT ARE REACHABLE)
+            push_ssh_keys(ipaddress, username, name)
+
+        else:
+            print("*********************************** REACHABLE***********************************")
+            print("step 1 :  " + name + ": is NOT REACHABLE")
+            _unreachable_report_excel = _unreachable_report_excel.append(
+                {'ip': ipaddress, 'facility': name, 'username': username, 'code': 1}, ignore_index=True)
 
         _counter_ += 1
-        unreachable_report_excel = unreachable_report_excel.append(
-            {'ip': ipaddress, 'facility': name, 'username': username, 'code': 1}, ignore_index=True)
-        unreachable_report_excel.to_excel('unreachable_report_excel.xlsx', index=False, header=True)
+    _connection_report_excel.to_excel('Reachable-Report.xlsx', index=False, header=True)
+    _unreachable_report_excel.to_excel('unreachable_report_excel.xlsx', index=False, header=True)
 
-        _counter_ += 1
-        unreachable_report_excel = unreachable_report_excel.append(
-            {'ip': ipaddress, 'facility': name, 'username': username, 'code': 1}, ignore_index=True)
-        unreachable_report_excel.to_excel('unreachable_report_excel.xlsx', index=False, header=True)
     return 1
 
 
-def push_ssh_keys():
-    # then try to push ssh keys
-    # then try to push ssh keys
-    ip_address = sites_from_xi[_counter_]["fields"]["ip_address"]
-    username = sites_from_xi[_counter_]["fields"]["username"]
-    facility = sites_from_xi[_counter_]["fields"]["name"]
+def push_ssh_keys(ip_address, username, facility):
 
+    # Step 1 : get the parameters for sites  that are connected
+
+    # Step 2 : try to push ssh keys using the password provided.
+    _pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+    _not_pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
     ssh_code_occurrences = []
     # 1 define files to keep pushed ssh sites
 
@@ -90,16 +90,16 @@ def push_ssh_keys():
         print("-----DONE-----")
     if 0 in ssh_code_occurrences:
         print("SSH KEY ADDED")
-        pushed_report_excel = pushed_report_excel.append(
+        _pushed_report_excel = _pushed_report_excel.append(
             {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
 
         # print("Returned code : " + ssh_code + "")
     else:
-        not_pushed_report_excel = not_pushed_report_excel.append(
+        _not_pushed_report_excel = _not_pushed_report_excel.append(
             {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
 
-    not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
-    pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
+    _not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
+    _pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
 
     print("*****************************************************************************************")
 
