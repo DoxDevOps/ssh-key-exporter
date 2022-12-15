@@ -19,7 +19,6 @@ def get_xi_data(url):
     """
     response = requests.get(url)
     site_data = json.loads(response.text)
-    print(site_data)
     return site_data
 
 
@@ -47,10 +46,6 @@ def check_connectivity(sites_from_xi):
             _connection_report_excel = _connection_report_excel.append(
                 {'ip': ipaddress, 'facility': name, 'username': username, 'code': 0}, ignore_index=True)
 
-
-            # then try to push ssh Keys ( ONLY FOR SITES THAT ARE REACHABLE)
-            push_ssh_keys(ipaddress, username, name)
-
         else:
             print("*********************************** REACHABLE***********************************")
             print("step 1 :  " + name + ": is NOT REACHABLE")
@@ -64,9 +59,10 @@ def check_connectivity(sites_from_xi):
     return 1
 
 
-def push_ssh_keys(ip_address, username, facility):
-
+def push_ssh_keys():
     # Step 1 : get the parameters for sites  that are connected
+    print("##################################### PUSHING SSH KEYS "
+          "###############################################################################")
     all_reachable_sites = pd.read_excel('./Reachable-Report.xlsx')
     # Step 2 : try to push ssh keys using the password provided.
     _pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
@@ -74,6 +70,9 @@ def push_ssh_keys(ip_address, username, facility):
     ssh_code_occurrences = []
     # Step 3: Loop through the connected sites define files to keep pushed ssh sites
     for each in all_reachable_sites['ip'].values:
+        facility = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'facility')].item())
+        username = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'username')].item())
+
         for each_password in _PASSWORDS_:
             # if connected, then push ssh keys
             # answer = os.system("ssh-copy-id "+username+"@"+ipaddress+" | echo 'yes \n' ")
@@ -82,26 +81,26 @@ def push_ssh_keys(ip_address, username, facility):
                     (all_reachable_sites['ip'] == each, 'username')].item() + "@" + each)
 
             ssh_code_occurrences.append(ssh_code)
-            print("all ssh key push test are as follows :")
-            print(ssh_code_occurrences)
-            print("-----DONE-----")
-        if 0 in ssh_code_occurrences:
-            print("SSH KEY ADDED")
-            facility = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'facility')].item())
-            username = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'username')].item())
+        print(f"All ssh key push test are as follows : {ssh_code_occurrences} and this is for {facility}")
 
+        print("-----DONE-----")
+
+        if 0 in ssh_code_occurrences:
+            print(f"********** SUCCESS : Key pushed to {facility}  **********")
             _pushed_report_excel = _pushed_report_excel.append(
-                {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
+                {'ip': each, 'facility': facility, 'username': username, 'code': 0}, ignore_index=True)
 
             # print("Returned code : " + ssh_code + "")
         else:
+            print(f"********** FAILURE : Key NOT pushed to {facility}  **********")
             _not_pushed_report_excel = _not_pushed_report_excel.append(
-                {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
+                {'ip': each, 'facility': facility, 'username': username, 'code': ssh_code_occurrences},
+                ignore_index=True)
 
         _not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
         _pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
 
-        print("*****************************************************************************************")
+        del ssh_code_occurrences[:] # delete the list
 
     return 1
 
@@ -110,3 +109,4 @@ def push_ssh_keys(ip_address, username, facility):
 
 site_details = get_xi_data(_ENDPOINT_)
 check_connectivity(site_details)
+push_ssh_keys()
