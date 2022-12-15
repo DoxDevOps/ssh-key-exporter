@@ -67,41 +67,41 @@ def check_connectivity(sites_from_xi):
 def push_ssh_keys(ip_address, username, facility):
 
     # Step 1 : get the parameters for sites  that are connected
-
+    all_reachable_sites = pd.read_excel('./Reachable-Report.xlsx')
     # Step 2 : try to push ssh keys using the password provided.
     _pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
     _not_pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
     ssh_code_occurrences = []
-    # 1 define files to keep pushed ssh sites
+    # Step 3: Loop through the connected sites define files to keep pushed ssh sites
+    for each in all_reachable_sites['ip'].values:
+        for each_password in _PASSWORDS_:
+            # if connected, then push ssh keys
+            # answer = os.system("ssh-copy-id "+username+"@"+ipaddress+" | echo 'yes \n' ")
+            ssh_code = os.system(
+                "sshpass -p " + each_password + " ssh-copy-id -o StrictHostKeyChecking=no " + all_reachable_sites.loc[
+                    (all_reachable_sites['ip'] == each, 'username')].item() + "@" + each)
 
-    print("Starting to push SSH KEYS at : " + facility)
+            ssh_code_occurrences.append(ssh_code)
+            print("all ssh key push test are as follows :")
+            print(ssh_code_occurrences)
+            print("-----DONE-----")
+        if 0 in ssh_code_occurrences:
+            print("SSH KEY ADDED")
+            facility = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'facility')].item())
+            username = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'username')].item())
 
-    for each_password in _PASSWORDS_:
-        # if connected, then push ssh keys
-        # answer = os.system("ssh-copy-id "+username+"@"+ipaddress+" | echo 'yes \n' ")
-        ssh_code = os.system(
-            "sshpass -p " + each_password + " ssh-copy-id -o StrictHostKeyChecking=no " + username + "@" + ip_address)
-        # os.system(
-        # "ssh meduser@10.44.0.65 | echo 'User*12345' && sshpass -p " + each + " ssh-copy-id -o StrictHostKeyChecking=no " + username + "@" + ipaddress)
+            _pushed_report_excel = _pushed_report_excel.append(
+                {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
 
-        ssh_code_occurrences.append(ssh_code)
-        print("all ssh key push test are as follows :")
-        print(ssh_code_occurrences)
-        print("-----DONE-----")
-    if 0 in ssh_code_occurrences:
-        print("SSH KEY ADDED")
-        _pushed_report_excel = _pushed_report_excel.append(
-            {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
+            # print("Returned code : " + ssh_code + "")
+        else:
+            _not_pushed_report_excel = _not_pushed_report_excel.append(
+                {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
 
-        # print("Returned code : " + ssh_code + "")
-    else:
-        _not_pushed_report_excel = _not_pushed_report_excel.append(
-            {'ip': ip_address, 'facility': facility, 'username': username, 'code': ssh_code}, ignore_index=True)
+        _not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
+        _pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
 
-    _not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
-    _pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
-
-    print("*****************************************************************************************")
+        print("*****************************************************************************************")
 
     return 1
 
