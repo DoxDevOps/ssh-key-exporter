@@ -27,12 +27,12 @@ def get_xi_data(url):
 
 
 def check_connectivity(sites_from_xi):
-    _counter_ = 50  # this is a checker
+    _counter_ = 0  # this is a checker
     number_of_sites = len(sites_from_xi)
     _connection_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
     _unreachable_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
 
-    while _counter_ < 70:
+    while _counter_ < number_of_sites:
         print("******************** PROGRESS BAR ******************************")
         print("Checking site number {} out of {} : ".format(_counter_ + 1, number_of_sites))
         print("**************************************************")
@@ -175,8 +175,8 @@ def get_system_utilization():
 
 # ************************** RUN THE SCRIPT **************************************************
 
-"""site_details = get_xi_data(_ENDPOINT_)
+site_details = get_xi_data(_ENDPOINT_)
 check_connectivity(site_details)
-push_ssh_keys()"""
-get_emr_version()
+#push_ssh_keys()
+#get_emr_version()
 # auto_log_in()
