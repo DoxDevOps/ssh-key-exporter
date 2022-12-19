@@ -65,14 +65,31 @@ def check_connectivity(sites_from_xi):
 
 
 def auto_log_in():
-    # 1. check if the site can be auto ssh(ed)
-    # 2. get the uname to confirm. the uname must be Linux since all servers are Linux
+
+    # 1. Open Excel file with pushed ssh sites
+    # 2. check if the site can be auto ssh(ed)
+    # 3. get the uname to confirm. the uname must be Linux since all servers are Linux
     username = "meduser"
     ipaddress = "something"
-    result = Connection('meduser@10.41.0.2').run('uname -s')
-    if 'Linux' == result.stdout:
-        print("save them in a seperate file then")
-    raise Exit("Sorry Bridge could auto ssh into ABC site")
+    _auto_ssh_report_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+    _cannot_auto_ssh_report_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+
+    all_pushed_reachable_sites = pd.read_excel('./pushed-report_excel.xlsx')
+    for each_ip_address in all_pushed_reachable_sites['ip'].values:
+        facility = (all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'facility')].item())
+        username = (all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'username')].item())
+
+        result = Connection('meduser@10.41.0.2').run('uname -s')
+        if 'Linux' == result.stdout:
+            _auto_ssh_report_ = _auto_ssh_report_.append(
+                {'ip': each_ip_address, 'facility': facility, 'username': username, 'code': 0}, ignore_index=True)
+        else:
+            # cannot auto ssh although a key was pushed
+            _cannot_auto_ssh_report_ = _cannot_auto_ssh_report_.append(
+                {'ip': each_ip_address, 'facility': facility, 'username': username, 'code': 0}, ignore_index=True)
+        raise Exit("Sorry Bridge could auto ssh into ABC site")
+    _auto_ssh_report_.to_excel('auto_ssh_sites.xlsx', index=False, header=True)
+    _cannot_auto_ssh_report_.to_excel('cannot_auto_ssh_sites.xlsx', index=False, header=True)
 
     return 1
 
