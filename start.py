@@ -127,11 +127,11 @@ def get_emr_version():
     directory = {"HIS-Core": "/var/www/HIS-Core", "BHT-EMR-API": "/var/www/BHT-EMR-API"}
     all_pushed_ssh_sites = pd.read_excel('./pushed_report_excel.xlsx')
 
-    # for each in all_pushed_ssh_sites['ip'].values:
+    # for each_ip_address in all_pushed_ssh_sites['ip'].values:
     # facility = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'facility')].item())
     # username = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'username')].item())
 
-    # p = subprocess.Popen(['ssh', f'{username}@{each}'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    # p = subprocess.Popen(['ssh', f'{username}@{each_ip_address}'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     # print("@@@@@@@@@@@@")
     # print(p)
     # p.stdin.write(
@@ -145,7 +145,7 @@ def get_emr_version():
     host = "10.41.0.2"
     port = 22
     username = "meduser"
-    # password = "Pass"
+    version_dict ={}
     for each_directory in directory:
         command = "/usr/bin/git  --git-dir={}/.git describe --tags `git rev-list --tags --max-count=1` \n".format(
             directory)
@@ -156,11 +156,12 @@ def get_emr_version():
 
         stdin, stdout, stderr = ssh.exec_command(command)
 
-        lines = stdout.readlines()
-        # time.sleep(5)
-        print(lines)
+        tag = stdout.readlines()
         stdin.close()
-    return 1
+        version_dict[each_directory] = str(tag, 'utf-8')
+    json_object = json.dumps(version_dict)
+    json_object = json.loads(json_object)
+    return json_object
 
 
 # ************************** RUN THE SCRIPT **************************************************
