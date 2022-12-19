@@ -5,10 +5,9 @@ import platform
 import subprocess
 import time
 from fabric import Connection
-
 import requests as requests
 from invoke import Exit
-
+import paramiko
 from config.config import data
 import pandas as pd
 
@@ -65,19 +64,18 @@ def check_connectivity(sites_from_xi):
 
 
 def auto_log_in():
-
     # 1. Open Excel file with pushed ssh sites
     # 2. check if the site can be auto ssh(ed)
     # 3. get the uname to confirm. the uname must be Linux since all servers are Linux
-    username = "meduser"
-    ipaddress = "something"
     _auto_ssh_report_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
     _cannot_auto_ssh_report_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
 
     all_pushed_reachable_sites = pd.read_excel('./pushed-report_excel.xlsx')
     for each_ip_address in all_pushed_reachable_sites['ip'].values:
-        facility = (all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'facility')].item())
-        username = (all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'username')].item())
+        facility = (
+            all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'facility')].item())
+        username = (
+            all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'username')].item())
 
         result = Connection('meduser@10.41.0.2').run('uname -s')
         if 'Linux' == result.stdout:
@@ -142,43 +140,37 @@ def push_ssh_keys():
 
 def get_emr_version():
     directory = {"HIS-Core": "/var/www/HIS-Core", "BHT-EMR-API": "/var/www/BHT-EMR-API"}
-    all_pushed_ssh_sites = pd.read_excel('./pushed_report_excel.xlsx')
+    all_pushed_ssh_sites = pd.read_excel('./auto_ssh_sites.xlsx')
 
-    # for each_ip_address in all_pushed_ssh_sites['ip'].values:
-    # facility = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'facility')].item())
-    # username = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'username')].item())
-
-    # p = subprocess.Popen(['ssh', f'{username}@{each_ip_address}'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    # print("@@@@@@@@@@@@")
-    # print(p)
-    # p.stdin.write(
-    # "/usr/bin/git  --git-dir={}/.git describe --tags `git rev-list --tags --max-count=1` \n".format(directory))
-    # print("************GETTING TAGS*****************")
-    # print(f"HIS-CORE FOR :{facility} is :{p.stdout.read().strip()}")
-    # print(p.stdout.read().strip())
-    # print("****************************************\n")
-    import paramiko
-
-    host = "10.41.0.2"
     port = 22
-    username = "meduser"
-    version_dict ={}
-    for each_directory in directory:
-        command = "/usr/bin/git  --git-dir={}/.git describe --tags `git rev-list --tags --max-count=1` \n".format(
-            directory)
+    version_dict = {}
+    for each_ip in all_pushed_ssh_sites['ip'].values:
+        # facility = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'facility')].item())
+        username = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each_ip, 'username')].item())
 
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(host, port, username)
+        for each_directory in directory:
+            command = "/usr/bin/git  --git-dir={}/.git describe --tags `git rev-list --tags --max-count=1` \n".format(
+                directory)
 
-        stdin, stdout, stderr = ssh.exec_command(command)
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(each_ip, port, username)
 
-        tag = stdout.readlines()
-        stdin.close()
-        version_dict[each_directory] = str(tag, 'utf-8')
-    json_object = json.dumps(version_dict)
-    json_object = json.loads(json_object)
-    return json_object
+            stdin, stdout, stderr = ssh.exec_command(command)
+
+            tag = stdout.readlines()
+            stdin.close()
+
+            version_dict[each_directory] = str(tag, 'utf-8')
+        json_object = json.dumps(version_dict)
+        json_object = json.loads(json_object)
+        print(json_object)
+    return 1
+
+
+def get_system_utilization():
+    print("get all stats")
+    return 1
 
 
 # ************************** RUN THE SCRIPT **************************************************
