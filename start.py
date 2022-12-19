@@ -3,7 +3,12 @@ import json
 import os
 import platform
 import subprocess
+import time
+from fabric import Connection
+
 import requests as requests
+from invoke import Exit
+
 from config.config import data
 import pandas as pd
 
@@ -23,12 +28,12 @@ def get_xi_data(url):
 
 
 def check_connectivity(sites_from_xi):
-    _counter_ = 0  # this is a checker
+    _counter_ = 50  # this is a checker
     number_of_sites = len(sites_from_xi)
     _connection_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
     _unreachable_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
 
-    while _counter_ < 50:
+    while _counter_ < 70:
         print("******************** PROGRESS BAR ******************************")
         print("Checking site number {} out of {} : ".format(_counter_ + 1, number_of_sites))
         print("**************************************************")
@@ -55,6 +60,19 @@ def check_connectivity(sites_from_xi):
         _counter_ += 1
     _connection_report_excel.to_excel('Reachable-Report.xlsx', index=False, header=True)
     _unreachable_report_excel.to_excel('unreachable_report_excel.xlsx', index=False, header=True)
+
+    return 1
+
+
+def auto_log_in():
+    # 1. check if the site can be auto ssh(ed)
+    # 2. get the uname to confirm. the uname must be Linux since all servers are Linux
+    username = "meduser"
+    ipaddress = "something"
+    result = Connection('meduser@10.41.0.2').run('uname -s')
+    if 'Linux' == result.stdout:
+        print("save them in a seperate file then")
+    raise Exit("Sorry Bridge could auto ssh into ABC site")
 
     return 1
 
@@ -100,13 +118,55 @@ def push_ssh_keys():
         _not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
         _pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
 
-        del ssh_code_occurrences[:] # delete the list
+        del ssh_code_occurrences[:]  # delete the list
 
+    return 1
+
+
+def get_emr_version():
+    directory = {"HIS-Core": "/var/www/HIS-Core", "BHT-EMR-API": "/var/www/BHT-EMR-API"}
+    all_pushed_ssh_sites = pd.read_excel('./pushed_report_excel.xlsx')
+
+    # for each in all_pushed_ssh_sites['ip'].values:
+    # facility = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'facility')].item())
+    # username = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'username')].item())
+
+    # p = subprocess.Popen(['ssh', f'{username}@{each}'], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    # print("@@@@@@@@@@@@")
+    # print(p)
+    # p.stdin.write(
+    # "/usr/bin/git  --git-dir={}/.git describe --tags `git rev-list --tags --max-count=1` \n".format(directory))
+    # print("************GETTING TAGS*****************")
+    # print(f"HIS-CORE FOR :{facility} is :{p.stdout.read().strip()}")
+    # print(p.stdout.read().strip())
+    # print("****************************************\n")
+    import paramiko
+
+    host = "10.41.0.2"
+    port = 22
+    username = "meduser"
+    # password = "Pass"
+    for each_directory in directory:
+        command = "/usr/bin/git  --git-dir={}/.git describe --tags `git rev-list --tags --max-count=1` \n".format(
+            directory)
+
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(host, port, username)
+
+        stdin, stdout, stderr = ssh.exec_command(command)
+
+        lines = stdout.readlines()
+        # time.sleep(5)
+        print(lines)
+        stdin.close()
     return 1
 
 
 # ************************** RUN THE SCRIPT **************************************************
 
-site_details = get_xi_data(_ENDPOINT_)
+"""site_details = get_xi_data(_ENDPOINT_)
 check_connectivity(site_details)
-push_ssh_keys()
+push_ssh_keys()"""
+get_emr_version()
+# auto_log_in()
