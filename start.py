@@ -4,10 +4,14 @@ import os
 import platform
 import subprocess
 import time
+
+import distro as distro
 from fabric import Connection
 import requests as requests
 from invoke import Exit
 import paramiko
+
+from SystemUtilization import get_host_system_details
 from config.config import data
 import pandas as pd
 
@@ -160,7 +164,6 @@ def get_emr_version():
 
             tag = stdout.readlines()
             stdin.close()
-
             version_dict[each_directory] = str(tag, 'utf-8')
         json_object = json.dumps(version_dict)
         json_object = json.loads(json_object)
@@ -170,13 +173,35 @@ def get_emr_version():
 
 def get_system_utilization():
     print("get all stats")
-    return 1
+    details = get_host_system_details("meduser", "10.41.0.2")
+    # print(details)
+    # calculating hdd_used_in_percentiles
+    hdd_used_in_percentiles = (int(''.join(filter(str.isdigit, details[5]))) /
+                               int(''.join(filter(str.isdigit, details[3])))) * 100
+    hdd_used_in_percentiles = round(hdd_used_in_percentiles)
+    host_details = {"ip_address": "10.41.0.2",
+                    "os_name": details[0],
+                    "os_version": details[1],
+                    "cpu_utilization": details[2],
+                    "hdd_total_storage": details[3],
+                    "hdd_remaining_storage": details[4],
+                    "hdd_used_storage": details[5],
+                    "hdd_used_in_percentile": f"{hdd_used_in_percentiles}%",
+                    "total_ram": details[7],
+                    "used_ram": details[8],
+                    "remaining_ram": details[9]
+                    }
+
+    print(host_details)
+
+    return details
 
 
 # ************************** RUN THE SCRIPT **************************************************
 
-site_details = get_xi_data(_ENDPOINT_)
-check_connectivity(site_details)
-#push_ssh_keys()
-#get_emr_version()
+# site_details = get_xi_data(_ENDPOINT_)
+# check_connectivity(site_details)
+# push_ssh_keys()
+# get_emr_version()
 # auto_log_in()
+get_system_utilization()
