@@ -3,205 +3,187 @@ import json
 import os
 import platform
 import subprocess
-import time
-
-import distro as distro
 from fabric import Connection
-import requests as requests
+import requests 
 from invoke import Exit
 import paramiko
-
-from SystemUtilization import get_host_system_details
+import argparse
 from config.config import data
 import pandas as pd
 
 _PASSWORDS_ = data["PASSWORD"]
 _ENDPOINT_ = data["ENDPOINT"]
+_ENDPOINT_ALL_CLUSTERS_ = data["ENDPOINT_ALL_CLUSTERS"]
+_ENDPOINT_SINGLE_CLUSTER = data["ENDPOINT_SINGLE_CLUSTERS"] # for this provide cluster id
 
+class Connectivity:
+    def __init__(self):
+        pass
+    
+    def get_xi_data(self):
+        """
+        function that gets all sites from xi
+        :param url: endpoint
+        :return: json object containing site details
+        """
+        response = requests.get(_ENDPOINT_)         
+        site_data = json.loads(response.content)
+         
+        return site_data
 
-def get_xi_data(url):
-    """
-    function that gets all sites from xi
-    :param url: endpoint
-    :return: json object containing site details
-    """
-    response = requests.get(url)
-    site_data = json.loads(response.text)
-    return site_data
+    def get_clusters_from_xi(self):
+        """Function that gets the clusters from xi
 
+        Args:
+            _ENDPOINT_ (_type_): _description_
+        """
+        print("getting all clusters")
+        
+        response = requests.get(_ENDPOINT_ALL_CLUSTERS_)
+        print(response)
+        cluster_data = json.loads(response.text)
+        
+        return cluster_data
+    
+    def get_sites_from_a_cluster(self, cluster_id):
+        """THis will give you sites primary key under each cluster
 
-def check_connectivity(sites_from_xi):
-    _counter_ = 0  # this is a checker
-    number_of_sites = len(sites_from_xi)
-    _connection_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-    _unreachable_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
+        Args:
+            _ENDPOINT_SINGLE_CLUSTER (_type_): _description_
+            cluster_id (_type_): _description_
 
-    while _counter_ < number_of_sites:
-        print("******************** PROGRESS BAR ******************************")
-        print("Checking site number {} out of {} : ".format(_counter_ + 1, number_of_sites))
-        print("**************************************************")
+        Returns:
+            _type_: _description_
+        """
+        response = requests.get(f"{_ENDPOINT_SINGLE_CLUSTER}{cluster_id}")
+        single_cluster_data = json.loads(response.text)
+        print(single_cluster_data)
+        cluster_sites = single_cluster_data[0]["fields"]["site"]
+        return cluster_sites
 
-        ipaddress = sites_from_xi[_counter_]["fields"]["ip_address"]  # get the IP address
-        username = sites_from_xi[_counter_]["fields"]["username"]  # get the username
-        name = sites_from_xi[_counter_]["fields"]["name"]  # get the site name
+    def check_connectivity_in_all_sites(self):
+        print("we are starting")
+        _ 
+        
+        _connection_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'cluster-name', 'cluster-pk'])
+        _unreachable_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'cluster-name', 'cluster-pk'])
 
-        # 4. Check if a site is reachable
-        param = '-n' if platform.system().lower() == 'windows' else '-c'
+        # first get all clusters from xi
+        all_clusters_from_xi = self.get_clusters_from_xi()
+        all_sites = self.get_xi_data()
+        
+        for cluster in all_clusters_from_xi:
+            print("here is the cluster")
+            print(cluster)
+            pk = cluster["pk"]
+            cluster_name = cluster["fields"]["name"]
+            #description = cluster["fields"]["description"]
+            
+            # get sites from the cluster
+            sites_from_the_cluster_pks = self.get_sites_from_a_cluster(pk)
+            
+            for each_site_in_cluster_pk in sites_from_the_cluster_pks:                 
+                for site_details_from_xi in all_sites:                     
+                    if site_details_from_xi["pk"] == each_site_in_cluster_pk:                         
+                        site_name = site_details_from_xi["fields"]["name"]
+                        site_ip_address = site_details_from_xi["fields"]["ip_address"]
+                        site_username = site_details_from_xi["fields"]["username"]
+                        # 4. Check if a site is reachable
+                        param = '-n' if platform.system().lower() == 'windows' else '-c'
 
-        if subprocess.call(['ping', param, '1', ipaddress]) == 0:
-            print("*********************************** REACHABLE***********************************")
-            print("step 1 :  " + name + ": is REACHABLE")
-            _connection_report_excel = _connection_report_excel.append(
-                {'ip': ipaddress, 'facility': name, 'username': username, 'code': 0}, ignore_index=True)
+                        if subprocess.call(['ping', param, '1', site_ip_address]) == 0:
+                            print("step 1 :  " + site_name + ": is REACHABLE")
+                            _connection_report_excel = _connection_report_excel.append({'ip': site_ip_address, 'facility': site_name, 'username': site_username, 'cluster-name': cluster_name, 'cluster-pk': each_site_in_cluster_pk}, ignore_index=True)
+                        else:
+                            print("*********************************** REACHABLE***********************************")
+                            print("step 1 :  " + site_name + ": is NOT REACHABLE")
+                            _unreachable_report_excel = _unreachable_report_excel.append({'ip': site_ip_address, 'facility': site_name, 'username': site_username, 'cluster-pk': cluster_name, 'cluster-name': each_site_in_cluster_pk}, ignore_index=True)
+            
+            _connection_report_excel.to_excel('Reachable-Report.xlsx', index=False, header=True)
+            _unreachable_report_excel.to_excel('unreachable_report_excel.xlsx', index=False, header=True)
 
-        else:
-            print("*********************************** REACHABLE***********************************")
-            print("step 1 :  " + name + ": is NOT REACHABLE")
-            _unreachable_report_excel = _unreachable_report_excel.append(
-                {'ip': ipaddress, 'facility': name, 'username': username, 'code': 1}, ignore_index=True)
+        return 1
+    
+class SSHKeyPusher:
+    def __init__(self, passwords):
+        self._PASSWORDS_ = passwords
 
-        _counter_ += 1
-    _connection_report_excel.to_excel('Reachable-Report.xlsx', index=False, header=True)
-    _unreachable_report_excel.to_excel('unreachable_report_excel.xlsx', index=False, header=True)
-
-    return 1
-
-
-def auto_log_in():
-    # 1. Open Excel file with pushed ssh sites
-    # 2. check if the site can be auto ssh(ed)
-    # 3. get the uname to confirm. the uname must be Linux since all servers are Linux
-    _auto_ssh_report_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-    _cannot_auto_ssh_report_ = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-
-    all_pushed_reachable_sites = pd.read_excel('./pushed-report_excel.xlsx')
-    for each_ip_address in all_pushed_reachable_sites['ip'].values:
-        facility = (
-            all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'facility')].item())
-        username = (
-            all_pushed_reachable_sites.loc[(all_pushed_reachable_sites['ip'] == each_ip_address, 'username')].item())
-
-        result = Connection('meduser@10.41.0.2').run('uname -s')
-        if 'Linux' == result.stdout:
-            _auto_ssh_report_ = _auto_ssh_report_.append(
-                {'ip': each_ip_address, 'facility': facility, 'username': username, 'code': 0}, ignore_index=True)
-        else:
-            # cannot auto ssh although a key was pushed
-            _cannot_auto_ssh_report_ = _cannot_auto_ssh_report_.append(
-                {'ip': each_ip_address, 'facility': facility, 'username': username, 'code': 0}, ignore_index=True)
-        raise Exit("Sorry Bridge could auto ssh into ABC site")
-    _auto_ssh_report_.to_excel('auto_ssh_sites.xlsx', index=False, header=True)
-    _cannot_auto_ssh_report_.to_excel('cannot_auto_ssh_sites.xlsx', index=False, header=True)
-
-    return 1
-
-
-def push_ssh_keys():
-    # Step 1 : get the parameters for sites  that are connected
-    print("##################################### PUSHING SSH KEYS "
-          "###############################################################################")
-    all_reachable_sites = pd.read_excel('./Reachable-Report.xlsx')
-    # Step 2 : try to push ssh keys using the password provided.
-    _pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-    _not_pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'code'])
-    ssh_code_occurrences = []
-    # Step 3: Loop through the connected sites define files to keep pushed ssh sites
-    for each in all_reachable_sites['ip'].values:
-        facility = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'facility')].item())
-        username = (all_reachable_sites.loc[(all_reachable_sites['ip'] == each, 'username')].item())
-
-        for each_password in _PASSWORDS_:
-            # if connected, then push ssh keys
-            # answer = os.system("ssh-copy-id "+username+"@"+ipaddress+" | echo 'yes \n' ")
-            ssh_code = os.system(
-                "sshpass -p " + each_password + " ssh-copy-id -o StrictHostKeyChecking=no " + all_reachable_sites.loc[
-                    (all_reachable_sites['ip'] == each, 'username')].item() + "@" + each)
-
-            ssh_code_occurrences.append(ssh_code)
-        print(f"All ssh key push test are as follows : {ssh_code_occurrences} and this is for {facility}")
-
-        print("-----DONE-----")
-
-        if 0 in ssh_code_occurrences:
-            print(f"********** SUCCESS : Key pushed to {facility}  **********")
-            _pushed_report_excel = _pushed_report_excel.append(
-                {'ip': each, 'facility': facility, 'username': username, 'code': 0}, ignore_index=True)
-
-            # print("Returned code : " + ssh_code + "")
-        else:
-            print(f"********** FAILURE : Key NOT pushed to {facility}  **********")
-            _not_pushed_report_excel = _not_pushed_report_excel.append(
-                {'ip': each, 'facility': facility, 'username': username, 'code': ssh_code_occurrences},
-                ignore_index=True)
-
+    def push_ssh_keys(self, cluster_id):
+        # Step 1: Get the parameters for sites that are connected
+        all_sites = pd.read_excel('./Reachable-Report.xlsx')
+        
+        # Step 2: Filter rows based on the provided cluster_id
+        reachable_sites = all_sites[all_sites['cluster-pk'] == cluster_id]
+        
+        # DataFrames to store push results
+        _pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'cluster-name', 'cluster-pk'])
+        _not_pushed_report_excel = pd.DataFrame(columns=['ip', 'facility', 'username', 'cluster-name', 'cluster-pk'])
+        
+        # Step 3: Loop through the connected sites and push ssh keys
+        for index, row in reachable_sites.iterrows():
+            ip = row['ip']
+            facility = row['facility']
+            username = row['username']
+            cluster_name = row['cluster-name']
+            
+            ssh_code_occurrences = []
+            
+            for password in self._PASSWORDS_:
+                ssh_code = os.system(f"sshpass -p {password} ssh-copy-id -o StrictHostKeyChecking=no {username}@{ip}")
+                ssh_code_occurrences.append(ssh_code)
+            
+            print(f"All ssh key push test are as follows: {ssh_code_occurrences} and this is for {facility}")
+            print("-----DONE-----")
+            
+            if 0 in ssh_code_occurrences:
+                print(f"********** SUCCESS: Key pushed to {facility} **********")
+                _pushed_report_excel = _pushed_report_excel.append({
+                    'ip': ip, 'facility': facility, 'username': username, 'cluster-name': cluster_name,  'cluster-pk': cluster_id}, ignore_index=True)
+            else:
+                print(f"********** FAILURE: Key NOT pushed to {facility} **********")
+                _not_pushed_report_excel = _not_pushed_report_excel.append({
+                    'ip': ip, 'facility': facility, 'username': username, 'cluster-name': cluster_name,  'cluster-pk': cluster_id
+                }, ignore_index=True)
+        
+        # Save the results to Excel files
         _not_pushed_report_excel.to_excel('not_pushed_report_excel.xlsx', index=False, header=True)
         _pushed_report_excel.to_excel('pushed_report_excel.xlsx', index=False, header=True)
 
-        del ssh_code_occurrences[:]  # delete the list
-
-    return 1
+        return 1
 
 
-def get_emr_version():
-    directory = {"HIS-Core": "/var/www/HIS-Core", "BHT-EMR-API": "/var/www/BHT-EMR-API"}
-    all_pushed_ssh_sites = pd.read_excel('./auto_ssh_sites.xlsx')
+ 
+    
+def main():
+    # Create an ArgumentParser object
+    parser = argparse.ArgumentParser()
 
-    port = 22
-    version_dict = {}
-    for each_ip in all_pushed_ssh_sites['ip'].values:
-        # facility = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each, 'facility')].item())
-        username = (all_pushed_ssh_sites.loc[(all_pushed_ssh_sites['ip'] == each_ip, 'username')].item())
+    # Add the -h and -l flags
+    parser.add_argument("-connect", "--connectivity", action="store_true", help="Simply checks connectivity from XI server")
+    parser.add_argument("-ssh", "--sshKeys", action="store_true", help="Pushes ssh keys to sites and check if the server "
+                                                                 "can AUto ssh into the sites")
 
-        for each_directory in directory:
-            command = "/usr/bin/git  --git-dir={}/.git describe --tags `git rev-list --tags --max-count=1` \n".format(
-                directory)
+    parser.add_argument("-c", "--cluster_id", type=int, required=True, help="Cluster ID to filter the sites")
+    parser.add_argument("-p", "--passwords", type=str, required=True, help="List of passwords to try for SSH")
+    parser.add_argument("-ssh", "--sshKeys", action="store_true", help="Pushes SSH keys to sites and checks if the server")
 
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(each_ip, port, username)
+    args = parser.parse_args()
+    # Check if the -h flag was specified
+    if args.connectivity:
+        # Display the help message and exit
+        #get_xi_data(_ENDPOINT_)
+        check_connectivity = Connectivity()
+        check_connectivity.check_connectivity_in_all_sites()
 
-            stdin, stdout, stderr = ssh.exec_command(command)
+        #check_connectivity_in_all_sites()
+        print("checking connectivity")
 
-            tag = stdout.readlines()
-            stdin.close()
-            version_dict[each_directory] = str(tag, 'utf-8')
-        json_object = json.dumps(version_dict)
-        json_object = json.loads(json_object)
-        print(json_object)
-    return 1
+    if args.sshKeys:
+        check_connectivity = Connectivity()
+        check_connectivity.check_connectivity_in_all_sites()
 
+        ssh_pusher = SSHKeyPusher(args.passwords)
+        ssh_pusher.push_ssh_keys(cluster_id=args.cluster_id)
 
-def get_system_utilization():
-    print("get all stats")
-    details = get_host_system_details("meduser", "10.41.0.2")
-    # print(details)
-    # calculating hdd_used_in_percentiles
-    hdd_used_in_percentiles = (int(''.join(filter(str.isdigit, details[5]))) /
-                               int(''.join(filter(str.isdigit, details[3])))) * 100
-    hdd_used_in_percentiles = round(hdd_used_in_percentiles)
-    host_details = {"ip_address": "10.41.0.2",
-                    "os_name": details[0],
-                    "os_version": details[1],
-                    "cpu_utilization": details[2],
-                    "hdd_total_storage": details[3],
-                    "hdd_remaining_storage": details[4],
-                    "hdd_used_storage": details[5],
-                    "hdd_used_in_percentile": f"{hdd_used_in_percentiles}%",
-                    "total_ram": details[7],
-                    "used_ram": details[8],
-                    "remaining_ram": details[9]
-                    }
-
-    print(host_details)
-
-    return details
-
-
-# ************************** RUN THE SCRIPT **************************************************
-
-# site_details = get_xi_data(_ENDPOINT_)
-# check_connectivity(site_details)
-# push_ssh_keys()
-# get_emr_version()
-# auto_log_in()
-get_system_utilization()
+if __name__ == "__main__":
+    main()
