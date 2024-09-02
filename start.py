@@ -149,24 +149,29 @@ def main():
 
     args = parser.parse_args()
     
-    if args.cluster_id is None:
-        raise ValueError("Cluster ID cannot be None. Please provide a valid cluster ID.")
+    # Ensure only one option is selected
+    if args.connectivity and args.sshKeys:
+        parser.error("You can only select one operation at a time: either check connectivity or push SSH keys.")
 
-    # Split the passwords into a list
-    passwords_list = args.passwords.split(',')
-
-    # Check if passwords have been provided
-    if not passwords_list:
-        raise ValueError("No passwords provided. Please provide at least one password.")
-
-    if args.connectivity:
-        check_connectivity = Connectivity()
-        check_connectivity.check_connectivity_in_all_sites()
-        print("Checking connectivity")
-
+    # If the SSH key pushing option is selected, ensure required arguments are provided
     if args.sshKeys:
+        if args.cluster_id is None:
+            parser.error("Cluster ID is required when pushing SSH keys. Please provide a valid cluster ID.")
+        if not args.passwords:
+            parser.error("Passwords are required when pushing SSH keys. Please provide at least one password.")
+        passwords_list = args.passwords.split(',')
+
+        # Proceed with SSH key pushing
         ssh_pusher = SSHKeyPusher(passwords_list)
         ssh_pusher.push_ssh_keys(cluster_id=args.cluster_id)
+
+    elif args.connectivity:
+        # Proceed with connectivity check
+        check_connectivity = Connectivity()
+        check_connectivity.check_connectivity_in_all_sites()
+    else:
+        parser.error("No operation selected. Use --connectivity to check connectivity or --sshKeys to push SSH keys.")
+
 
 if __name__ == "__main__":
     main()
